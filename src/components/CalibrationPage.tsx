@@ -8,7 +8,7 @@ interface CalibrationPageProps {
 
 const CalibrationPage = ({ onCalibrationComplete, onExit }: CalibrationPageProps) => {
   const [measurements, setMeasurements] = useState<number[]>([])
-  const [phase, setPhase] = useState<'ready' | 'countdown' | 'getready' | 'measuring' | 'wait' | 'complete'>('ready')
+  const [phase, setPhase] = useState<'ready' | 'countdown' | 'getready' | 'measuring' | 'wait' | 'preparing' | 'complete'>('ready')
   const [countdown, setCountdown] = useState(3)
   const [dotStartTime, setDotStartTime] = useState<number>(0)
   const [currentTrial, setCurrentTrial] = useState(0)
@@ -76,8 +76,8 @@ const CalibrationPage = ({ onCalibrationComplete, onExit }: CalibrationPageProps
         // All 5 measurements complete
         setPhase('complete')
       } else {
-        // Start next measurement
-        setPhase('ready')
+        // Preparing for next measurement - don't show ready state
+        setPhase('preparing')
         setTimeout(() => startSingleMeasurement(), 100) // Small delay before next trial
       }
     }, 500)
@@ -180,6 +180,11 @@ const CalibrationPage = ({ onCalibrationComplete, onExit }: CalibrationPageProps
           </div>
         )}
 
+        {phase === 'preparing' && (
+          <div className="text-lg text-muted-foreground">
+            Preparing next measurement...
+          </div>
+        )}
 
         {phase === 'complete' && (
           <div className="text-center">
