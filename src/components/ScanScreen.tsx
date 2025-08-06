@@ -110,6 +110,12 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
           }
           
           setSpaceStartPosition({ x: adjustedX, y: adjustedY })
+          
+          // Add the initial trail point immediately for visual feedback
+          if (settings.showTrail) {
+            setTrailPositions(prev => [...prev, { x: adjustedX, y: adjustedY }])
+          }
+          
           startContinuousTrail()
         }
         setIsSpacePressed(true)
@@ -155,6 +161,12 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
         
         setIsMousePressed(true)
         setSpaceStartPosition({ x: adjustedX, y: adjustedY })
+        
+        // Add the initial trail point immediately for visual feedback
+        if (settings.showTrail) {
+          setTrailPositions(prev => [...prev, { x: adjustedX, y: adjustedY }])
+        }
+        
         startContinuousTrail()
       }
     }
@@ -378,21 +390,20 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
       />
 
       {/* Trail dots */}
-      {settings.showTrail && (
+      {settings.showTrail && trailPositions.length > 0 && (
         <>
-          {console.log('🎨 Rendering trail - showTrail:', settings.showTrail, 'trail points:', trailPositions.length, 'trailColor:', settings.trailColor)}
           {trailPositions.map((pos, i) => (
             <div
               key={`trail-${i}`}
               className="absolute rounded-full pointer-events-none"
               style={{
-                left: pos.x - (dotSize / 4),
-                top: pos.y - (dotSize / 4),
-                width: `${dotSize / 2}px`,
-                height: `${dotSize / 2}px`,
+                left: pos.x - 3,
+                top: pos.y - 3,
+                width: '6px',
+                height: '6px',
                 backgroundColor: settings.trailColor,
-                zIndex: 5,
-                border: '1px solid red', // Debug border to see if dots are rendered
+                zIndex: 15,
+                opacity: 0.8,
               }}
             />
           ))}
