@@ -54,11 +54,8 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
 
   const startContinuousTrail = useCallback(() => {
     if (!settings.showTrail) {
-      console.log('Trail disabled in settings')
       return
     }
-    
-    console.log('🚀 Starting continuous trail')
     
     // Clear any existing interval first
     if (trailIntervalRef.current) {
@@ -66,43 +63,23 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
       trailIntervalRef.current = undefined
     }
 
-    // Test if setInterval works at all
-    console.log('🧪 Testing setInterval...')
-    const testInterval = setInterval(() => {
-      console.log('🔥 TEST INTERVAL WORKING!')
-    }, 100)
-    
-    setTimeout(() => {
-      clearInterval(testInterval)
-      console.log('🧪 Test interval cleared')
-    }, 500)
-
-    // Create the actual trail interval
-    console.log('📍 Creating trail interval...')
+    // Create the actual trail interval to record points while space is held
     const intervalId = setInterval(() => {
-      console.log('🔴 TRAIL TICK!')
       const pos = currentPositionRef.current
-      console.log('🎯 Current position:', pos)
       
       setTrailPositions(prev => {
         const newTrail = [...prev, { x: pos.x, y: pos.y }]
-        console.log('🟢 Trail updated, length:', newTrail.length)
         return newTrail
       })
-    }, 100) // Slower interval for testing
+    }, 50) // Record trail points every 50ms for smooth line
     
     trailIntervalRef.current = intervalId
-    console.log('✅ Interval ID stored:', intervalId)
   }, [settings.showTrail])
 
   const stopContinuousTrail = useCallback(() => {
-    console.log('🛑 Stopping continuous trail, interval ID:', trailIntervalRef.current)
     if (trailIntervalRef.current) {
       clearInterval(trailIntervalRef.current)
       trailIntervalRef.current = undefined
-      console.log('✅ Trail interval cleared')
-    } else {
-      console.log('❌ No interval to clear')
     }
   }, [])
 
@@ -112,7 +89,27 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
       if (e.code === 'Space') {
         e.preventDefault()
         if (!isSpacePressed && isScanning) {
-          setSpaceStartPosition(currentPosition)
+          // Apply reaction time offset to the START position when space is first pressed
+          const pixelsPerMs = dotSize / settings.scanSpeed
+          const offsetPixels = reactionTimeOffset * pixelsPerMs
+          
+          let adjustedX = currentPosition.x
+          let adjustedY = currentPosition.y
+          
+          // Adjust start position based on scan direction
+          if (settings.scanDirection === 'leftToRight') {
+            adjustedX = Math.max(0, currentPosition.x - offsetPixels)
+          } else if (settings.scanDirection === 'alternating') {
+            const currentRow = Math.floor(currentPosition.y / dotSize)
+            const isLeftToRight = currentRow % 2 === 0
+            if (isLeftToRight) {
+              adjustedX = Math.max(0, currentPosition.x - offsetPixels)
+            } else {
+              adjustedX = Math.min(window.innerWidth, currentPosition.x + offsetPixels)
+            }
+          }
+          
+          setSpaceStartPosition({ x: adjustedX, y: adjustedY })
           startContinuousTrail()
         }
         setIsSpacePressed(true)
@@ -127,8 +124,7 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
         e.preventDefault()
         if (isSpacePressed && isScanning && spaceStartPosition) {
           stopContinuousTrail()
-          recordHit()
-          // Keep trail until scan completes - don't clear it
+          recordTrailToGrid()
         }
         setIsSpacePressed(false)
         setSpaceStartPosition(null)
@@ -137,8 +133,28 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
 
     const handleMouseDown = (e: MouseEvent) => {
       if (isScanning) {
+        // Apply reaction time offset to the START position when mouse is first pressed
+        const pixelsPerMs = dotSize / settings.scanSpeed
+        const offsetPixels = reactionTimeOffset * pixelsPerMs
+        
+        let adjustedX = currentPosition.x
+        let adjustedY = currentPosition.y
+        
+        // Adjust start position based on scan direction
+        if (settings.scanDirection === 'leftToRight') {
+          adjustedX = Math.max(0, currentPosition.x - offsetPixels)
+        } else if (settings.scanDirection === 'alternating') {
+          const currentRow = Math.floor(currentPosition.y / dotSize)
+          const isLeftToRight = currentRow % 2 === 0
+          if (isLeftToRight) {
+            adjustedX = Math.max(0, currentPosition.x - offsetPixels)
+          } else {
+            adjustedX = Math.min(window.innerWidth, currentPosition.x + offsetPixels)
+          }
+        }
+        
         setIsMousePressed(true)
-        setSpaceStartPosition(currentPosition)
+        setSpaceStartPosition({ x: adjustedX, y: adjustedY })
         startContinuousTrail()
       }
     }
@@ -146,49 +162,26 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
     const handleMouseUp = (e: MouseEvent) => {
       if (isMousePressed && isScanning && spaceStartPosition) {
         stopContinuousTrail()
-        recordHit()
-        // Keep trail until scan completes - don't clear it
+        recordTrailToGrid()
       }
       setIsMousePressed(false)
       setSpaceStartPosition(null)
     }
 
-    const recordHit = () => {
-      console.log('Recording hit at position:', currentPosition, 'showTrail:', settings.showTrail)
-      // Apply reaction time offset to input release
-      const pixelsPerMs = dotSize / settings.scanSpeed
-      const offsetPixels = reactionTimeOffset * pixelsPerMs
-      
-      let adjustedX = currentPosition.x
-      let adjustedY = currentPosition.y
-      
-      // Adjust position based on scan direction
-      if (settings.scanDirection === 'leftToRight') {
-        adjustedX = Math.max(0, currentPosition.x - offsetPixels)
-      } else if (settings.scanDirection === 'alternating') {
-        const currentRow = Math.floor(currentPosition.y / dotSize)
-        const isLeftToRight = currentRow % 2 === 0
-        if (isLeftToRight) {
-          adjustedX = Math.max(0, currentPosition.x - offsetPixels)
-        } else {
-          adjustedX = Math.min(window.innerWidth, currentPosition.x + offsetPixels)
+    const recordTrailToGrid = () => {
+      // Record all trail positions to the grid
+      trailPositions.forEach(pos => {
+        const gridX = Math.floor(pos.x / dotSize)
+        const gridY = Math.floor(pos.y / dotSize)
+        
+        if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
+          setScanData(prev => {
+            const newData = [...prev]
+            newData[gridY][gridX] = true
+            return newData
+          })
         }
-      }
-      
-      const gridX = Math.floor(adjustedX / dotSize)
-      const gridY = Math.floor(adjustedY / dotSize)
-      
-      console.log('Adjusted position:', { adjustedX, adjustedY }, 'Grid:', { gridX, gridY })
-      
-      if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
-        setScanData(prev => {
-          const newData = [...prev]
-          newData[gridY][gridX] = true
-          return newData
-        })
-      } else {
-        console.log('Position outside grid bounds')
-      }
+      })
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -250,7 +243,6 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
            if (y >= rows) {
              setIsComplete(true)
              setIsScanning(false)
-             console.log('Scan complete! Final trail has', trailPositions.length, 'points')
              return
            }
           // Hide cursor and prepare for next row
@@ -267,7 +259,6 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
            if (y >= rows) {
              setIsComplete(true)
              setIsScanning(false)
-             console.log('Scan complete! Final trail has', trailPositions.length, 'points')
              return
            }
           // Hide cursor and prepare for next row
