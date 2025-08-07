@@ -13,112 +13,47 @@ interface ScanScreenProps {
 const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
   const { settings } = useScanSettings()
   const { toast } = useToast()
+  
+  // Core scanning state
   const [isScanning, setIsScanning] = useState(false)
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 })
-  const [scanData, setScanData] = useState<boolean[][]>([])
-  const [trailPositions, setTrailPositions] = useState<Array<{ x: number, y: number }>>([])
-  const [isSpacePressed, setIsSpacePressed] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
-  const [isTransitioning, setIsTransitioning] = useState(false)
-  const [spaceStartPosition, setSpaceStartPosition] = useState<{ x: number, y: number } | null>(null)
-  const [isMousePressed, setIsMousePressed] = useState(false)
-  const trailIntervalRef = useRef<NodeJS.Timeout>()
+  
+  // Trail state - SIMPLE
+  const [isSpacePressed, setIsSpacePressed] = useState(false)
+  const [trailPositions, setTrailPositions] = useState<Array<{ x: number, y: number }>>([])
+  const [allTrails, setAllTrails] = useState<Array<Array<{ x: number, y: number }>>>([])
+  
   const scanIntervalRef = useRef<NodeJS.Timeout>()
   
-  // Use settings.gridSize for both dot size and grid squares
-  const dotSize = settings.gridSize // Size of the scanning dot and grid squares
-  const [cols, setCols] = useState(Math.floor(window.innerWidth / dotSize))
-  const [rows, setRows] = useState(Math.floor(window.innerHeight / dotSize))
-
-  // Update grid dimensions when dotSize changes
-  useEffect(() => {
-    const newCols = Math.floor(window.innerWidth / dotSize)
-    const newRows = Math.floor(window.innerHeight / dotSize)
-    setCols(newCols)
-    setRows(newRows)
-  }, [dotSize])
-
+  // Grid calculations
+  const dotSize = settings.gridSize
+  const cols = Math.floor(window.innerWidth / dotSize)
+  const rows = Math.floor(window.innerHeight / dotSize)
+  
   // Calculate center position for the red focus dot
   const centerX = window.innerWidth / 2
   const centerY = window.innerHeight / 2
 
-  // Initialize scan data array
+  // SIMPLE: Add current position to trail whenever position changes AND space is pressed
   useEffect(() => {
-    const initialData = Array(rows).fill(null).map(() => Array(cols).fill(false))
-    setScanData(initialData)
-  }, [rows, cols])
-
-  // Trail management functions - using refs to avoid closure issues
-  const currentPositionRef = useRef(currentPosition)
-  currentPositionRef.current = currentPosition
-
-  const startContinuousTrail = useCallback(() => {
-    if (!settings.showTrail) {
-      return
-    }
-    
-    // Clear any existing interval first
-    if (trailIntervalRef.current) {
-      clearInterval(trailIntervalRef.current)
-      trailIntervalRef.current = undefined
-    }
-
-    // Create the actual trail interval to record points while space is held
-    const intervalId = setInterval(() => {
-      const pos = currentPositionRef.current
-      
+    if (isSpacePressed && isScanning) {
+      console.log('Adding position to trail:', currentPosition)
       setTrailPositions(prev => {
-        const newTrail = [...prev, { x: pos.x, y: pos.y }]
+        const newTrail = [...prev, currentPosition]
+        console.log('Trail now has', newTrail.length, 'positions')
         return newTrail
       })
-    }, 50) // Record trail points every 50ms for smooth line
-    
-    trailIntervalRef.current = intervalId
-  }, [settings.showTrail])
-
-  const stopContinuousTrail = useCallback(() => {
-    if (trailIntervalRef.current) {
-      clearInterval(trailIntervalRef.current)
-      trailIntervalRef.current = undefined
     }
-  }, [])
+  }, [currentPosition, isSpacePressed, isScanning])
 
-  // Handle keyboard and mouse events
+  // SIMPLE: Handle space key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
+      if (e.code === 'Space' && !isSpacePressed && isScanning) {
         e.preventDefault()
-        if (!isSpacePressed && isScanning) {
-          // Apply reaction time offset to the START position when space is first pressed
-          const pixelsPerMs = dotSize / settings.scanSpeed
-          const offsetPixels = reactionTimeOffset * pixelsPerMs
-          
-          let adjustedX = currentPosition.x
-          let adjustedY = currentPosition.y
-          
-          // Adjust start position based on scan direction
-          if (settings.scanDirection === 'leftToRight') {
-            adjustedX = Math.max(0, currentPosition.x - offsetPixels)
-          } else if (settings.scanDirection === 'alternating') {
-            const currentRow = Math.floor(currentPosition.y / dotSize)
-            const isLeftToRight = currentRow % 2 === 0
-            if (isLeftToRight) {
-              adjustedX = Math.max(0, currentPosition.x - offsetPixels)
-            } else {
-              adjustedX = Math.min(window.innerWidth, currentPosition.x + offsetPixels)
-            }
-          }
-          
-          setSpaceStartPosition({ x: adjustedX, y: adjustedY })
-          
-          // Add the initial trail point immediately for visual feedback
-          if (settings.showTrail) {
-            setTrailPositions(prev => [...prev, { x: adjustedX, y: adjustedY }])
-          }
-          
-          startContinuousTrail()
-        }
         setIsSpacePressed(true)
+        setTrailPositions([currentPosition]) // Start new trail
       }
       if (e.code === 'Escape') {
         onExit()
@@ -126,162 +61,68 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
+      if (e.code === 'Space' && isSpacePressed && isScanning) {
         e.preventDefault()
-        if (isSpacePressed && isScanning && spaceStartPosition) {
-          stopContinuousTrail()
-          recordTrailToGrid()
-        }
         setIsSpacePressed(false)
-        setSpaceStartPosition(null)
-      }
-    }
-
-    const handleMouseDown = (e: MouseEvent) => {
-      if (isScanning) {
-        // Apply reaction time offset to the START position when mouse is first pressed
-        const pixelsPerMs = dotSize / settings.scanSpeed
-        const offsetPixels = reactionTimeOffset * pixelsPerMs
-        
-        let adjustedX = currentPosition.x
-        let adjustedY = currentPosition.y
-        
-        // Adjust start position based on scan direction
-        if (settings.scanDirection === 'leftToRight') {
-          adjustedX = Math.max(0, currentPosition.x - offsetPixels)
-        } else if (settings.scanDirection === 'alternating') {
-          const currentRow = Math.floor(currentPosition.y / dotSize)
-          const isLeftToRight = currentRow % 2 === 0
-          if (isLeftToRight) {
-            adjustedX = Math.max(0, currentPosition.x - offsetPixels)
-          } else {
-            adjustedX = Math.min(window.innerWidth, currentPosition.x + offsetPixels)
-          }
+        // Save completed trail
+        if (trailPositions.length > 0) {
+          setAllTrails(prev => [...prev, trailPositions])
         }
-        
-        setIsMousePressed(true)
-        setSpaceStartPosition({ x: adjustedX, y: adjustedY })
-        
-        // Add the initial trail point immediately for visual feedback
-        if (settings.showTrail) {
-          setTrailPositions(prev => [...prev, { x: adjustedX, y: adjustedY }])
-        }
-        
-        startContinuousTrail()
+        setTrailPositions([]) // Clear current trail
       }
-    }
-
-    const handleMouseUp = (e: MouseEvent) => {
-      if (isMousePressed && isScanning && spaceStartPosition) {
-        stopContinuousTrail()
-        recordTrailToGrid()
-      }
-      setIsMousePressed(false)
-      setSpaceStartPosition(null)
-    }
-
-    const recordTrailToGrid = () => {
-      // Record all trail positions to the grid
-      trailPositions.forEach(pos => {
-        const gridX = Math.floor(pos.x / dotSize)
-        const gridY = Math.floor(pos.y / dotSize)
-        
-        if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
-          setScanData(prev => {
-            const newData = [...prev]
-            newData[gridY][gridX] = true
-            return newData
-          })
-        }
-      })
     }
 
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
-    window.addEventListener('mousedown', handleMouseDown)
-    window.addEventListener('mouseup', handleMouseUp)
     
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
-      window.removeEventListener('mousedown', handleMouseDown)
-      window.removeEventListener('mouseup', handleMouseUp)
-      if (trailIntervalRef.current) {
-        clearInterval(trailIntervalRef.current)
-      }
     }
-  }, [onExit, isSpacePressed, isMousePressed, isScanning, currentPosition, spaceStartPosition, dotSize, cols, rows, settings, reactionTimeOffset])
+  }, [isSpacePressed, isScanning, currentPosition, trailPositions, onExit])
 
-
-  // Scanning logic with smooth movement
+  // SIMPLE: Main scanning logic
   const startScan = useCallback(() => {
     setIsScanning(true)
-    setCurrentPosition({ x: dotSize / 2, y: dotSize / 2 })
-    // Don't clear trail positions on scan start - keep accumulated trail
     setIsComplete(false)
-    setIsTransitioning(false)
+    setTrailPositions([])
+    setAllTrails([])
     
-    let x = 0
-    let y = 0
-    let direction = 1 // 1 for right, -1 for left
-    let transitioning = false
+    let pixelX = dotSize / 2
+    let pixelY = dotSize / 2
+    
+    // Calculate movement speed
+    const pixelsPerStep = Math.max(1, Math.round(dotSize / 4)) // Move 1/4 of dot size per step
+    const intervalMs = settings.scanSpeed / 4 // Divide scan speed for smooth movement
     
     const scan = () => {
-      if (transitioning) {
-        // Show cursor at new row position
-        const targetX = x * dotSize + dotSize / 2
-        const targetY = y * dotSize + dotSize / 2
-        setCurrentPosition({ x: targetX, y: targetY })
-        setIsTransitioning(false)
-        transitioning = false
-        return
-      }
-      
-      // Calculate the center position of the current grid square
-      const targetX = x * dotSize + dotSize / 2
-      const targetY = y * dotSize + dotSize / 2
-      
       // Update position
-      setCurrentPosition({ x: targetX, y: targetY })
+      console.log('Scanning to position:', pixelX, pixelY)
+      setCurrentPosition({ x: pixelX, y: pixelY })
       
-      // Move to next position
-      if (settings.scanDirection === 'alternating') {
-        x += direction
-        if (x >= cols || x < 0) {
-          // Reset to start of next row
-          x = direction === 1 ? cols - 1 : 0
-          y++
-          direction *= -1
-           if (y >= rows) {
-             setIsComplete(true)
-             setIsScanning(false)
-             return
-           }
-          // Hide cursor and prepare for next row
-          setIsTransitioning(true)
-          transitioning = true
-        }
-      } else {
-        // left-to-right only
-        x++
-        if (x >= cols) {
-          // Reset to start of next row
-          x = 0
-          y++
-           if (y >= rows) {
-             setIsComplete(true)
-             setIsScanning(false)
-             return
-           }
-          // Hide cursor and prepare for next row
-          setIsTransitioning(true)
-          transitioning = true
+      // Move right
+      pixelX += pixelsPerStep
+      
+      // If reached end of row, move to next row
+      if (pixelX >= window.innerWidth - dotSize / 2) {
+        console.log('End of row reached, moving to next row')
+        pixelX = dotSize / 2
+        pixelY += dotSize
+        
+        // If reached end of screen, complete scan
+        if (pixelY >= window.innerHeight - dotSize / 2) {
+          console.log('Scan complete')
+          setIsComplete(true)
+          setIsScanning(false)
+          return
         }
       }
     }
     
-    scanIntervalRef.current = setInterval(scan, settings.scanSpeed)
-  }, [dotSize, cols, rows, settings.scanDirection, settings.scanSpeed])
+    // Start scanning
+    setCurrentPosition({ x: pixelX, y: pixelY })
+    scanIntervalRef.current = setInterval(scan, intervalMs)
+  }, [dotSize, settings.scanSpeed])
 
   const stopScan = useCallback(() => {
     setIsScanning(false)
@@ -294,14 +135,12 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
     const data = {
       timestamp: new Date().toISOString(),
       settings: settings,
-      gridData: scanData,
+      trails: allTrails,
       screenDimensions: { width: window.innerWidth, height: window.innerHeight },
-      gridDimensions: { cols, rows },
-      dotSize: dotSize
+      reactionTimeOffset: reactionTimeOffset
     }
     
     try {
-      // Save to database
       const { error } = await supabase
         .from('scan_history')
         .insert({
@@ -309,9 +148,7 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
           scan_data: data as any
         })
 
-      if (error) {
-        throw error
-      }
+      if (error) throw error
 
       toast({
         title: "Scan saved",
@@ -325,15 +162,21 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
         variant: "destructive",
       })
     }
+  }
 
-    // Also download as JSON for backup
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `sight-analysis-${Date.now()}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+  const restartScan = () => {
+    setIsComplete(false)
+    setIsScanning(false)
+    setCurrentPosition({ x: 0, y: 0 })
+    setTrailPositions([])
+    setAllTrails([])
+    setIsSpacePressed(false)
+    
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current)
+    }
+    
+    setTimeout(() => startScan(), 100)
   }
 
   return (
@@ -348,36 +191,6 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
         <X className="h-4 w-4" />
       </Button>
 
-      {/* Grid overlay - using dotSize for grid squares */}
-      {settings.showGrid && (
-        <div className="absolute inset-0 pointer-events-none">
-          <svg width="100%" height="100%" style={{ opacity: settings.gridOpacity / 100 }}>
-            {Array.from({ length: rows + 1 }).map((_, i) => (
-              <line
-                key={`h-${i}`}
-                x1="0"
-                y1={i * dotSize}
-                x2="100%"
-                y2={i * dotSize}
-                stroke="currentColor"
-                strokeWidth="1"
-              />
-            ))}
-            {Array.from({ length: cols + 1 }).map((_, i) => (
-              <line
-                key={`v-${i}`}
-                x1={i * dotSize}
-                y1="0"
-                x2={i * dotSize}
-                y2="100%"
-                stroke="currentColor"
-                strokeWidth="1"
-              />
-            ))}
-          </svg>
-        </div>
-      )}
-
       {/* Central red focus dot */}
       <div
         className="absolute rounded-full bg-red-500 pointer-events-none z-10"
@@ -389,41 +202,73 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
         }}
       />
 
-      {/* Trail dots */}
-      {settings.showTrail && trailPositions.length > 0 && (
-        <>
-          {trailPositions.map((pos, i) => (
-            <div
-              key={`trail-${i}`}
-              className="absolute rounded-full pointer-events-none"
-              style={{
-                left: pos.x - 3,
-                top: pos.y - 3,
-                width: '6px',
-                height: '6px',
-                backgroundColor: settings.trailColor,
-                zIndex: 15,
-                opacity: 0.8,
-              }}
+      {/* SIMPLE: Trail visualization */}
+      {settings.showTrail && (
+        <svg 
+          className="absolute inset-0 pointer-events-none" 
+          style={{ zIndex: 20 }}
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${window.innerWidth} ${window.innerHeight}`}
+        >
+          {/* Completed trails */}
+          {allTrails.map((trail, index) => (
+            trail.length > 1 && (
+              <polyline
+                key={`trail-${index}`}
+                points={trail.map(pos => `${pos.x},${pos.y}`).join(' ')}
+                stroke={settings.trailColor}
+                strokeWidth={dotSize}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                opacity={0.8}
+              />
+            )
+          ))}
+          
+          {/* Current trail */}
+          {trailPositions.length > 1 && (
+            <polyline
+              points={trailPositions.map(pos => `${pos.x},${pos.y}`).join(' ')}
+              stroke={settings.trailColor}
+              strokeWidth={dotSize}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              opacity={0.8}
+            />
+          )}
+          
+          {/* Debug: Show trail positions as circles */}
+          {trailPositions.map((pos, index) => (
+            <circle
+              key={`debug-${index}`}
+              cx={pos.x}
+              cy={pos.y}
+              r="2"
+              fill="blue"
+              opacity={0.5}
             />
           ))}
-        </>
+        </svg>
       )}
 
-      {/* Scanning dot with smooth transition */}
-      {isScanning && !isTransitioning && (
+      {/* Scanning dot */}
+      {isScanning && (
         <div
-          className="absolute rounded-full bg-primary animate-pulse pointer-events-none transition-all duration-200 ease-linear"
+          className="absolute rounded-full bg-black pointer-events-none"
           style={{
             left: currentPosition.x - (dotSize / 2),
             top: currentPosition.y - (dotSize / 2),
             width: `${dotSize}px`,
             height: `${dotSize}px`,
+            zIndex: 30,
           }}
         />
       )}
 
-      {/* Control panel - moves to top when cursor is in bottom half */}
+      {/* Control panel */}
       <div className={`absolute left-1/2 transform -translate-x-1/2 bg-card border rounded-lg p-4 space-y-2 ${
         currentPosition.y > window.innerHeight / 2 ? 'top-4' : 'bottom-4'
       }`}>
@@ -440,32 +285,18 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
             <p className="text-sm text-muted-foreground">Scan completed!</p>
             <div className="flex gap-2">
               <Button onClick={saveScanData}>Save Data</Button>
-              <Button onClick={() => { 
-                // Reset all state properly and clear trail only on restart
-                setIsComplete(false)
-                setIsScanning(false)
-                setCurrentPosition({ x: 0, y: 0 })
-                setScanData(Array(rows).fill(null).map(() => Array(cols).fill(false)))
-                setTrailPositions([]) // Clear trail only on restart
-                setIsSpacePressed(false)
-                setIsMousePressed(false)
-                setSpaceStartPosition(null)
-                setIsTransitioning(false)
-                if (scanIntervalRef.current) {
-                  clearInterval(scanIntervalRef.current)
-                }
-                // Start fresh scan
-                setTimeout(() => startScan(), 100)
-              }} variant="outline">
-                Restart
-              </Button>
+              <Button onClick={restartScan} variant="outline">Restart</Button>
             </div>
           </div>
         )}
         
         <p className="text-xs text-muted-foreground">
-          Focus on the red dot in the center • Press SPACE or hold mouse when you see the scanning dot disappear • ESC to exit
+          Focus on the red dot • Hold SPACE when you can't see the black dot • ESC to exit
         </p>
+        
+        <div className="text-xs text-muted-foreground">
+          Current Trail: {trailPositions.length} | Completed: {allTrails.length} | Position: {currentPosition.x.toFixed(0)},{currentPosition.y.toFixed(0)} | Space: {isSpacePressed ? 'PRESSED' : 'NOT PRESSED'}
+        </div>
       </div>
     </div>
   )
