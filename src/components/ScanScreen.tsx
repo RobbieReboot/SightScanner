@@ -40,12 +40,27 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
     if (isSpacePressed && isScanning) {
       console.log('Adding position to trail:', currentPosition)
       setTrailPositions(prev => {
+        // Check if this is a line break (y position changed significantly)
+        if (prev.length > 0) {
+          const lastPos = prev[prev.length - 1]
+          const yDiff = Math.abs(currentPosition.y - lastPos.y)
+          
+          // If Y position changed by more than half the dot size, it's a new line
+          if (yDiff > dotSize / 2) {
+            console.log('Line break detected, ending current trail and starting new one')
+            // Save current trail to completed trails
+            setAllTrails(prevTrails => [...prevTrails, prev])
+            // Start new trail with current position
+            return [currentPosition]
+          }
+        }
+        
         const newTrail = [...prev, currentPosition]
         console.log('Trail now has', newTrail.length, 'positions')
         return newTrail
       })
     }
-  }, [currentPosition, isSpacePressed, isScanning])
+  }, [currentPosition, isSpacePressed, isScanning, dotSize])
 
   // SIMPLE: Handle space key
   useEffect(() => {
