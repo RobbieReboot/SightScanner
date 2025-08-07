@@ -48,7 +48,7 @@ const ScanHistory = ({ onViewScan, onBack }: ScanHistoryProps) => {
     }
   }
 
-  const generateThumbnail = (gridData: boolean[][], cols: number, rows: number) => {
+  const generateThumbnail = (scanData: any) => {
     // Create a small canvas representation of the scan data
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
@@ -62,22 +62,30 @@ const ScanHistory = ({ onViewScan, onBack }: ScanHistoryProps) => {
     ctx.fillStyle = '#1f2937' // dark background
     ctx.fillRect(0, 0, thumbnailSize, thumbnailSize)
 
-    // Draw scan points
-    ctx.fillStyle = '#10b981' // green for detected points
-    const scaleX = thumbnailSize / cols
-    const scaleY = thumbnailSize / rows
+    // Draw trails if available
+    if (scanData.trails && scanData.trails.length > 0) {
+      ctx.strokeStyle = '#ef4444' // red for trails
+      ctx.lineWidth = 2
+      ctx.lineCap = 'round'
 
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        if (gridData[row] && gridData[row][col]) {
-          ctx.fillRect(
-            col * scaleX,
-            row * scaleY,
-            Math.max(1, scaleX),
-            Math.max(1, scaleY)
-          )
+      const scaleX = thumbnailSize / (scanData.screenDimensions?.width || 1920)
+      const scaleY = thumbnailSize / (scanData.screenDimensions?.height || 1080)
+
+      scanData.trails.forEach((trail: any[]) => {
+        if (trail.length > 1) {
+          ctx.beginPath()
+          trail.forEach((point, index) => {
+            const x = point.x * scaleX
+            const y = point.y * scaleY
+            if (index === 0) {
+              ctx.moveTo(x, y)
+            } else {
+              ctx.lineTo(x, y)
+            }
+          })
+          ctx.stroke()
         }
-      }
+      })
     }
 
     return canvas.toDataURL()
@@ -168,11 +176,7 @@ const ScanHistory = ({ onViewScan, onBack }: ScanHistoryProps) => {
                     <TableCell>
                       <div className="w-12 h-12 rounded border bg-card flex items-center justify-center overflow-hidden">
                         <img
-                          src={generateThumbnail(
-                            scan.scan_data.gridData,
-                            scan.scan_data.gridDimensions.cols,
-                            scan.scan_data.gridDimensions.rows
-                          )}
+                          src={generateThumbnail(scan.scan_data)}
                           alt="Scan thumbnail"
                           className="w-full h-full object-cover"
                         />
@@ -182,7 +186,10 @@ const ScanHistory = ({ onViewScan, onBack }: ScanHistoryProps) => {
                       {scan.calibration_reaction_time}ms
                     </TableCell>
                     <TableCell>
-                      {scan.scan_data.gridDimensions.cols} × {scan.scan_data.gridDimensions.rows}
+                      {scan.scan_data.gridDimensions ? 
+                        `${scan.scan_data.gridDimensions.cols} × ${scan.scan_data.gridDimensions.rows}` :
+                        `${scan.scan_data.trails?.length || 0} trails`
+                      }
                     </TableCell>
                     <TableCell>
                       <Button

@@ -68,7 +68,10 @@ const CalibrationPage = ({ onCalibrationComplete, onExit }: CalibrationPageProps
     const newMeasurements = [...measurements, reactionTime]
     setMeasurements(newMeasurements)
     
-    // Phase 4: 500ms wait, dot disappears immediately
+    // Clear all timers to prevent any race conditions
+    clearTimers()
+    
+    // Phase 4: Show result immediately, dot disappears
     setPhase('wait')
     
     timeoutRef.current = setTimeout(() => {
@@ -76,12 +79,11 @@ const CalibrationPage = ({ onCalibrationComplete, onExit }: CalibrationPageProps
         // All 5 measurements complete
         setPhase('complete')
       } else {
-        // Preparing for next measurement - don't show ready state
-        setPhase('preparing')
-        setTimeout(() => startSingleMeasurement(), 100) // Small delay before next trial
+        // Start next measurement directly without showing preparing phase
+        startSingleMeasurement()
       }
-    }, 500)
-  }, [phase, dotStartTime, measurements, startSingleMeasurement])
+    }, 1500) // Longer wait to prevent text flashing
+  }, [phase, dotStartTime, measurements, startSingleMeasurement, clearTimers])
 
   // Start calibration process
   const handleStartCalibration = useCallback(() => {
@@ -177,12 +179,6 @@ const CalibrationPage = ({ onCalibrationComplete, onExit }: CalibrationPageProps
         {phase === 'wait' && (
           <div className="text-lg text-green-600">
             Recorded! ({measurements[measurements.length - 1]}ms)
-          </div>
-        )}
-
-        {phase === 'preparing' && (
-          <div className="text-lg text-muted-foreground">
-            Preparing next measurement...
           </div>
         )}
 

@@ -62,13 +62,23 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
     }
   }, [currentPosition, isSpacePressed, isScanning, dotSize])
 
-  // SIMPLE: Handle space key
+  // SIMPLE: Handle space key with reaction time offset
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !isSpacePressed && isScanning) {
         e.preventDefault()
         setIsSpacePressed(true)
-        setTrailPositions([currentPosition]) // Start new trail
+        
+        // Apply reaction time offset to start position
+        // Calculate how far the dot moves during reaction time (use 50% of reaction time for more accuracy)
+        const pixelsPerMs = (dotSize / 4) / (settings.scanSpeed / 4) // pixels per millisecond
+        const offsetPixels = ((reactionTimeOffset || 0) * 0.5) * pixelsPerMs // Use 50% of reaction time
+        const offsetStartPosition = {
+          x: Math.max(dotSize / 2, currentPosition.x - offsetPixels), // Don't go past left edge
+          y: currentPosition.y
+        }
+        console.log(`Trail start with ${reactionTimeOffset * 0.5}ms offset: current=${currentPosition.x}, offset=${offsetPixels}, final=${offsetStartPosition.x}`)
+        setTrailPositions([offsetStartPosition])
       }
       if (e.code === 'Escape') {
         onExit()
@@ -79,9 +89,20 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
       if (e.code === 'Space' && isSpacePressed && isScanning) {
         e.preventDefault()
         setIsSpacePressed(false)
-        // Save completed trail
+        
+        // Apply reaction time offset to end position (use 50% of reaction time for more accuracy)
+        const pixelsPerMs = (dotSize / 4) / (settings.scanSpeed / 4) // pixels per millisecond
+        const offsetPixels = ((reactionTimeOffset || 0) * 0.5) * pixelsPerMs // Use 50% of reaction time
+        const offsetEndPosition = {
+          x: Math.max(dotSize / 2, currentPosition.x - offsetPixels), // Don't go past left edge
+          y: currentPosition.y
+        }
+        console.log(`Trail end with ${reactionTimeOffset * 0.5}ms offset: current=${currentPosition.x}, offset=${offsetPixels}, final=${offsetEndPosition.x}`)
+        
+        // Complete the current trail with offset end position
         if (trailPositions.length > 0) {
-          setAllTrails(prev => [...prev, trailPositions])
+          const offsetTrail = [...trailPositions, offsetEndPosition]
+          setAllTrails(prev => [...prev, offsetTrail])
         }
         setTrailPositions([]) // Clear current trail
       }
@@ -94,7 +115,7 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [isSpacePressed, isScanning, currentPosition, trailPositions, onExit])
+  }, [isSpacePressed, isScanning, currentPosition, trailPositions, onExit, reactionTimeOffset, dotSize, settings.scanSpeed])
 
   // SIMPLE: Main scanning logic
   const startScan = useCallback(() => {
@@ -123,14 +144,17 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
         console.log('End of row reached, moving to next row')
         pixelX = dotSize / 2
         pixelY += dotSize
-        
-        // If reached end of screen, complete scan
-        if (pixelY >= window.innerHeight - dotSize / 2) {
-          console.log('Scan complete')
-          setIsComplete(true)
-          setIsScanning(false)
-          return
+      }
+      
+      // Check if scan is complete (reached bottom of screen)
+      if (pixelY >= window.innerHeight - dotSize / 2) {
+        console.log('Scan complete - reached bottom of screen')
+        setIsComplete(true)
+        setIsScanning(false)
+        if (scanIntervalRef.current) {
+          clearInterval(scanIntervalRef.current)
         }
+        return
       }
     }
     
@@ -151,6 +175,8 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
       timestamp: new Date().toISOString(),
       settings: settings,
       trails: allTrails,
+      gridData: [], // Empty grid data for compatibility 
+      gridDimensions: { cols, rows }, // Add grid dimensions for history page
       screenDimensions: { width: window.innerWidth, height: window.innerHeight },
       reactionTimeOffset: reactionTimeOffset
     }
@@ -169,6 +195,21 @@ const ScanScreen = ({ onExit, reactionTimeOffset = 0 }: ScanScreenProps) => {
         title: "Scan saved",
         description: "Your scan has been saved to your history.",
       })
+
+      // Download as JSON backup
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `visual-field-scan-${Date.now()}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+
+      // Navigate back to dashboard after successful save
+      setTimeout(() => {
+        onExit()
+      }, 2000) // Wait 2 seconds to show the success toast
+
     } catch (error) {
       console.error('Error saving scan:', error)
       toast({

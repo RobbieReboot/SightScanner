@@ -6,10 +6,11 @@ interface ScanReplayProps {
   scanData: {
     timestamp: string
     settings: any
-    gridData: boolean[][]
+    trails: Array<Array<{ x: number; y: number }>>
+    gridData?: boolean[][] // Legacy compatibility
     screenDimensions: { width: number; height: number }
-    gridDimensions: { cols: number; rows: number }
-    dotSize: number
+    gridDimensions?: { cols: number; rows: number }
+    reactionTimeOffset?: number
   }
   onExit: () => void
 }
@@ -24,7 +25,6 @@ const ScanReplay = ({ scanData, onExit }: ScanReplayProps) => {
     setScale(Math.min(scaleX, scaleY, 1)) // Don't scale up, only down
   }, [scanData.screenDimensions])
 
-  const scaledDotSize = scanData.dotSize * scale
   const scaledWidth = scanData.screenDimensions.width * scale
   const scaledHeight = scanData.screenDimensions.height * scale
 
@@ -60,43 +60,9 @@ const ScanReplay = ({ scanData, onExit }: ScanReplayProps) => {
           height: scaledHeight,
         }}
       >
-        {/* Grid overlay */}
-        {scanData.settings.showGrid && (
-          <div className="absolute inset-0 pointer-events-none">
-            <svg 
-              width="100%" 
-              height="100%" 
-              style={{ opacity: scanData.settings.gridOpacity / 100 }}
-            >
-              {Array.from({ length: scanData.gridDimensions.rows + 1 }).map((_, i) => (
-                <line
-                  key={`h-${i}`}
-                  x1="0"
-                  y1={i * scaledDotSize}
-                  x2="100%"
-                  y2={i * scaledDotSize}
-                  stroke="currentColor"
-                  strokeWidth="1"
-                />
-              ))}
-              {Array.from({ length: scanData.gridDimensions.cols + 1 }).map((_, i) => (
-                <line
-                  key={`v-${i}`}
-                  x1={i * scaledDotSize}
-                  y1="0"
-                  x2={i * scaledDotSize}
-                  y2="100%"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                />
-              ))}
-            </svg>
-          </div>
-        )}
-
         {/* Central red focus dot */}
         <div
-          className="absolute rounded-full bg-red-500 pointer-events-none"
+          className="absolute rounded-full bg-red-500 pointer-events-none z-10"
           style={{
             left: (scaledWidth / 2) - 12,
             top: (scaledHeight / 2) - 12,
@@ -105,35 +71,45 @@ const ScanReplay = ({ scanData, onExit }: ScanReplayProps) => {
           }}
         />
 
-        {/* Detected points */}
-        {scanData.gridData.map((row, rowIndex) =>
-          row.map((detected, colIndex) => {
-            if (!detected) return null
+        {/* Trail visualization using SVG */}
+        <svg 
+          className="absolute inset-0 pointer-events-none"
+          width="100%" 
+          height="100%"
+          viewBox={`0 0 ${scanData.screenDimensions.width} ${scanData.screenDimensions.height}`}
+          preserveAspectRatio="none"
+        >
+          {scanData.trails && scanData.trails.map((trail, trailIndex) => {
+            if (!trail || trail.length < 2) return null
+            
+            // Convert trail points to polyline points string
+            const points = trail.map(point => `${point.x},${point.y}`).join(' ')
             
             return (
-              <div
-                key={`${rowIndex}-${colIndex}`}
-                className="absolute rounded-full pointer-events-none"
-                style={{
-                  left: colIndex * scaledDotSize + (scaledDotSize / 4),
-                  top: rowIndex * scaledDotSize + (scaledDotSize / 4),
-                  width: scaledDotSize / 2,
-                  height: scaledDotSize / 2,
-                  backgroundColor: scanData.settings.trailColor || '#10b981',
-                }}
+              <polyline
+                key={trailIndex}
+                points={points}
+                fill="none"
+                stroke={scanData.settings?.trailColor || '#10b981'}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
             )
-          })
-        )}
+          })}
+        </svg>
       </div>
 
       {/* Info panel */}
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-card border rounded-lg p-4 space-y-2">
         <div className="text-sm text-muted-foreground text-center">
-          <div>Grid: {scanData.gridDimensions.cols} × {scanData.gridDimensions.rows}</div>
-          <div>Dot Size: {scanData.dotSize}px</div>
-          <div>Scan Direction: {scanData.settings.scanDirection}</div>
-          <div>Scan Speed: {scanData.settings.scanSpeed}ms</div>
+          <div>Trails: {scanData.trails?.length || 0}</div>
+          <div>Screen: {scanData.screenDimensions.width} × {scanData.screenDimensions.height}</div>
+          <div>Scan Direction: {scanData.settings?.scanDirection || 'unknown'}</div>
+          <div>Scan Speed: {scanData.settings?.scanSpeed || 'unknown'}ms</div>
+          {scanData.reactionTimeOffset && (
+            <div>Reaction Time: {scanData.reactionTimeOffset}ms</div>
+          )}
         </div>
       </div>
     </div>
