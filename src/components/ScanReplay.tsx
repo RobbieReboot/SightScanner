@@ -34,82 +34,123 @@ const ScanReplay = ({ scanData, onExit }: ScanReplayProps) => {
 
   return (
     <div className="fixed inset-0 bg-background">
-      {/* Header */}
-      <div className="absolute top-4 left-4 right-4 z-50 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={onExit}>
+      {/* Header with Back button, Scan details, and Date */}
+      <div className="absolute top-4 left-4 right-4 z-50 flex items-start justify-between gap-4">
+        {/* Left: Back button and scan details */}
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" onClick={onExit} className="shrink-0">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to History
           </Button>
-          <div className="text-sm text-muted-foreground">
-            Scan from {new Date(scanData.timestamp).toLocaleString()}
+          
+          {/* Scan details sections */}
+          <div className="flex gap-4">
+            {/* Section 1: Basic info */}
+            <div className="bg-card border rounded-lg p-3">
+              <div className="text-sm space-y-1">
+                <div className="font-medium text-foreground">Basic Info</div>
+                <div className="text-muted-foreground">Trails: {scanData.trails?.length || 0}</div>
+                <div className="text-muted-foreground">Screen: {scanData.screenDimensions.width} × {scanData.screenDimensions.height}</div>
+              </div>
+            </div>
+            
+            {/* Section 2: Scan settings */}
+            <div className="bg-card border rounded-lg p-3">
+              <div className="text-sm space-y-1">
+                <div className="font-medium text-foreground">Settings</div>
+                <div className="text-muted-foreground">Direction: {scanData.settings?.scanDirection || 'unknown'}</div>
+                <div className="text-muted-foreground">Speed: {scanData.settings?.scanSpeed || 'unknown'}ms</div>
+              </div>
+            </div>
+            
+            {/* Section 3: Reaction time */}
+            {scanData.reactionTimeOffset && (
+              <div className="bg-card border rounded-lg p-3">
+                <div className="text-sm space-y-1">
+                  <div className="font-medium text-foreground">Timing</div>
+                  <div className="text-muted-foreground">Reaction Time: {scanData.reactionTimeOffset}ms</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={onExit}>
-          <X className="h-4 w-4" />
-        </Button>
+
+        {/* Right: Date panel and close button */}
+        <div className="flex items-start gap-4">
+          {/* Date panel */}
+          <div className="bg-card border rounded-lg p-3">
+            <div className="text-sm">
+              <div className="font-medium text-foreground">Scan Date</div>
+              <div className="text-muted-foreground">{new Date(scanData.timestamp).toLocaleString()}</div>
+            </div>
+          </div>
+          
+          <Button variant="ghost" size="sm" onClick={onExit} className="shrink-0">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* Replay container */}
-      <div
-        className="absolute bg-card/10 border border-border"
-        style={{
-          left: offsetX,
-          top: offsetY,
-          width: scaledWidth,
-          height: scaledHeight,
-        }}
-      >
-        {/* Central red focus dot */}
+      {/* Centered framed replay container */}
+      <div className="flex items-center justify-center min-h-screen pt-24 pb-8">
         <div
-          className="absolute rounded-full bg-red-500 pointer-events-none z-10"
+          className="bg-card border-2 border-border rounded-lg shadow-lg relative"
           style={{
-            left: (scaledWidth / 2) - 12,
-            top: (scaledHeight / 2) - 12,
-            width: '24px',
-            height: '24px',
+            width: scaledWidth + 32, // Add padding
+            height: scaledHeight + 32, // Add padding
+            padding: '16px',
           }}
-        />
-
-        {/* Trail visualization using SVG */}
-        <svg 
-          className="absolute inset-0 pointer-events-none"
-          width="100%" 
-          height="100%"
-          viewBox={`0 0 ${scanData.screenDimensions.width} ${scanData.screenDimensions.height}`}
-          preserveAspectRatio="none"
         >
-          {scanData.trails && scanData.trails.map((trail, trailIndex) => {
-            if (!trail || trail.length < 2) return null
-            
-            // Convert trail points to polyline points string
-            const points = trail.map(point => `${point.x},${point.y}`).join(' ')
-            
-            return (
-              <polyline
-                key={trailIndex}
-                points={points}
-                fill="none"
-                stroke={scanData.settings?.trailColor || '#10b981'}
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )
-          })}
-        </svg>
-      </div>
+          {/* Scan screen container */}
+          <div
+            className="relative bg-background border border-border/50 rounded"
+            style={{
+              width: scaledWidth,
+              height: scaledHeight,
+            }}
+          >
+            {/* Central red focus dot */}
+            <div
+              className="absolute rounded-full bg-red-500 pointer-events-none z-10"
+              style={{
+                left: (scaledWidth / 2) - 12,
+                top: (scaledHeight / 2) - 12,
+                width: '24px',
+                height: '24px',
+              }}
+            />
 
-      {/* Info panel */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-card border rounded-lg p-4 space-y-2">
-        <div className="text-sm text-muted-foreground text-center">
-          <div>Trails: {scanData.trails?.length || 0}</div>
-          <div>Screen: {scanData.screenDimensions.width} × {scanData.screenDimensions.height}</div>
-          <div>Scan Direction: {scanData.settings?.scanDirection || 'unknown'}</div>
-          <div>Scan Speed: {scanData.settings?.scanSpeed || 'unknown'}ms</div>
-          {scanData.reactionTimeOffset && (
-            <div>Reaction Time: {scanData.reactionTimeOffset}ms</div>
-          )}
+            {/* Trail visualization using SVG */}
+            <svg 
+              className="absolute inset-0 pointer-events-none"
+              width="100%" 
+              height="100%"
+              viewBox={`0 0 ${scanData.screenDimensions.width} ${scanData.screenDimensions.height}`}
+              preserveAspectRatio="none"
+            >
+              {scanData.trails && scanData.trails.map((trail, trailIndex) => {
+                if (!trail || trail.length < 2) return null
+                
+                // Convert trail points to polyline points string
+                const points = trail.map(point => `${point.x},${point.y}`).join(' ')
+                
+                // Use the same stroke width as the real scan screen (dotSize from settings)
+                const strokeWidth = scanData.settings?.gridSize || 40
+                
+                return (
+                  <polyline
+                    key={trailIndex}
+                    points={points}
+                    fill="none"
+                    stroke={scanData.settings?.trailColor || '#6b7280'}
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )
+              })}
+            </svg>
+          </div>
         </div>
       </div>
     </div>

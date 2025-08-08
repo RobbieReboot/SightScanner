@@ -17,7 +17,7 @@ const defaultSettings: ScanSettings = {
   showGrid: true,
   gridOpacity: 10,
   showTrail: true,
-  trailColor: '#ef4444' // Red color for better visibility
+  trailColor: '#6b7280' // Medium grey color
 }
 
 export const useScanSettings = () => {

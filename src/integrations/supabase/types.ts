@@ -1,3 +1,4 @@
+
 export type Json =
   | string
   | number
@@ -12,10 +13,38 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "12.2.12 (cd3cf9e)"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          operationName?: string
+          query?: string
+          variables?: Json
+          extensions?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       scan_history: {
         Row: {
+          analysis_date: string | null
+          analysis_results: Json | null
+          analysis_status: string | null
           calibration_reaction_time: number
           created_at: string
           id: string
@@ -23,6 +52,9 @@ export type Database = {
           scan_date: string
         }
         Insert: {
+          analysis_date?: string | null
+          analysis_results?: Json | null
+          analysis_status?: string | null
           calibration_reaction_time: number
           created_at?: string
           id?: string
@@ -30,6 +62,9 @@ export type Database = {
           scan_date?: string
         }
         Update: {
+          analysis_date?: string | null
+          analysis_results?: Json | null
+          analysis_status?: string | null
           calibration_reaction_time?: number
           created_at?: string
           id?: string
@@ -172,6 +207,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
